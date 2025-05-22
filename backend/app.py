@@ -3,7 +3,8 @@ from flask_cors import CORS
 import requests
 import hashlib
 from datetime import datetime
-from recommender import SentenceTransformerRecommender  # NUEVO
+from supabase import create_client
+from recommender import SentenceTransformerRecommender
 
 app = Flask(__name__)
 CORS(app)  # Permite peticiones desde React
@@ -65,17 +66,6 @@ def login():
     else:
         return jsonify({"error": "Credenciales incorrectas"}), 401
 
-# Datos simulados de películas (puedes luego cargar desde DB)
-# peliculas = [
-#     {"titulo": "Inception", "descripcion": "A thief who steals corporate secrets through dream-sharing technology."},
-#     {"titulo": "Interstellar", "descripcion": "A group of explorers travel through a wormhole in space in an attempt to ensure humanity's survival."},
-#     {"titulo": "The Matrix", "descripcion": "A computer hacker learns about the true nature of his reality."},
-#     {"titulo": "The Social Network", "descripcion": "The story of the founders of the social-networking website Facebook."},
-#     {"titulo": "Tenet", "descripcion": "A secret agent embarks on a time-bending mission to prevent the start of World War III."}
-# ]
-
-
-# recommender_model = SentenceTransformerRecommender()  # Inicializa una sola vez
 
 @app.route('/api/recomendacion', methods=['POST'])
 def recomendacion():
@@ -132,6 +122,30 @@ def recomendacion():
     ]
 
     return jsonify(recomendaciones)
+
+@app.route('/api/sugerencias', methods=['GET'])
+def sugerencias():
+    
+
+    SUPABASE_URL = "https://bpfdmufpudgtnnasfwin.supabase.co"
+    SUPABASE_API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwZmRtdWZwdWRndG5uYXNmd2luIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NzUwMDYwNSwiZXhwIjoyMDYzMDc2NjA1fQ.g912fWjyaD4Xww968ktEkhu7WXMRt4FD-_Vmx9BDYOM"
+    supabase = create_client(SUPABASE_URL, SUPABASE_API_KEY)
+
+    query = request.args.get('q', '').lower()
+
+    if not query:
+        return jsonify([])
+
+    # Buscar títulos que contengan el texto (máximo 3)
+    response = supabase.table("peliculas")\
+        .select("title")\
+        .ilike("title", f"%{query}%")\
+        .limit(3)\
+        .execute()
+
+    titulos = [item["title"] for item in response.data]
+    return jsonify(titulos)
+
 
 
 if __name__ == '__main__':
