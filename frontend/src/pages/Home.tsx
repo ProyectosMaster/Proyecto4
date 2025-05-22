@@ -5,8 +5,6 @@ const Home = () => {
   return (
     <div>
       <h1>Bienvenido</h1>
-      <Link to="/datos">Ver Usuarios</Link>
-      <BotonAuth />
     </div>
   );
 };

@@ -1,5 +1,11 @@
 # React + TypeScript + Vite
 
+- Instalaciones necesarias:
+- Para crear el frontend: npm create vite@latest frontend --template react 
+- npm install
+- npm install react-router-dom
+- npm install axios
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

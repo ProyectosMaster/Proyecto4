@@ -41,7 +41,6 @@ const Datos = () => {
           ))}
         </tbody>
       </table>
-      <BotonAuth />
     </div>
   );
 };

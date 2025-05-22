@@ -13,7 +13,7 @@ const RutaPrivada = ({ children }: Props) => {
     if (!isAuthenticated()) {
       const timer = setTimeout(() => {
         navigate('/login');
-      }, 5000);
+      }, 3500);
       return () => clearTimeout(timer); // limpiar el temporizador si cambia de página antes
     }
   }, []);

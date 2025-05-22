@@ -3,6 +3,7 @@ from flask_cors import CORS
 import requests
 import hashlib
 from datetime import datetime
+from recommender import SentenceTransformerRecommender  # NUEVO
 
 app = Flask(__name__)
 CORS(app)  # Permite peticiones desde React
@@ -63,6 +64,75 @@ def login():
         return jsonify({"success": True})
     else:
         return jsonify({"error": "Credenciales incorrectas"}), 401
+
+# Datos simulados de películas (puedes luego cargar desde DB)
+# peliculas = [
+#     {"titulo": "Inception", "descripcion": "A thief who steals corporate secrets through dream-sharing technology."},
+#     {"titulo": "Interstellar", "descripcion": "A group of explorers travel through a wormhole in space in an attempt to ensure humanity's survival."},
+#     {"titulo": "The Matrix", "descripcion": "A computer hacker learns about the true nature of his reality."},
+#     {"titulo": "The Social Network", "descripcion": "The story of the founders of the social-networking website Facebook."},
+#     {"titulo": "Tenet", "descripcion": "A secret agent embarks on a time-bending mission to prevent the start of World War III."}
+# ]
+
+
+# recommender_model = SentenceTransformerRecommender()  # Inicializa una sola vez
+
+@app.route('/api/recomendacion', methods=['POST'])
+def recomendacion():
+    from recommender import SentenceTransformerRecommender
+    from sklearn.metrics.pairwise import cosine_similarity
+
+    data = request.get_json()
+    titulo_input = data.get('pelicula')
+    # print(f"[DEBUG] Película buscada: {titulo_input}")
+
+    if not titulo_input:
+        return jsonify({"error": "Película no proporcionada"}), 400
+
+    # 1. Obtener todas las películas desde Supabase
+    headers = {
+        "apikey": SUPABASE_API_KEY,
+        "Authorization": f"Bearer {SUPABASE_API_KEY}"
+    }
+    response = requests.get(
+        f"{SUPABASE_URL}/rest/v1/peliculas?select=id,title,overview",
+        headers=headers
+    )
+
+    peliculas = response.json()
+    # print(f"[DEBUG] Total películas en Supabase: {len(peliculas)}")
+
+    # 2. Buscar película de entrada
+    pelicula_input = next((p for p in peliculas if p["title"].lower() == titulo_input.lower()), None)
+    if not pelicula_input:
+        return jsonify({"error": "Película no encontrada"}), 404
+
+    descripcion_input = pelicula_input["overview"]
+
+    # 3. Filtrar otras películas
+    otras = [p for p in peliculas if p["title"].lower() != titulo_input.lower()]
+    titulos_otros = [p["title"] for p in otras]
+    descripciones_otros = [p["overview"] for p in otras]
+
+    # 4. Recomendación usando SentenceTransformer
+    modelo = SentenceTransformerRecommender()
+    emb_input = modelo.encode([descripcion_input])
+    emb_otros = modelo.encode(descripciones_otros)
+
+    sim = cosine_similarity(emb_input, emb_otros)[0]
+    top_k = 3
+    indices = sim.argsort()[::-1][:top_k]
+
+    recomendaciones = [
+        {
+            "titulo": titulos_otros[i],
+            "similitud": float(sim[i])
+        }
+        for i in indices
+    ]
+
+    return jsonify(recomendaciones)
+
 
 if __name__ == '__main__':
     app.run(debug=True)
