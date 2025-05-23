@@ -3,9 +3,7 @@ import axios from "axios";
 
 const Recomendacion = () => {
   const [pelicula, setPelicula] = useState("");
-  const [recomendaciones, setRecomendaciones] = useState<
-    { titulo: string; similitud: number }[]
-  >([]);
+  const [recomendaciones, setRecomendaciones] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [buscado, setBuscado] = useState(false);
   const [sugerencias, setSugerencias] = useState<string[]>([]);
@@ -91,15 +89,14 @@ const Recomendacion = () => {
 
       {!loading && recomendaciones.length > 0 && (
         <ul>
-          {recomendaciones.map((r, i) => (
-            <li key={i}>
-              {r.titulo} (Similitud: {(r.similitud * 100).toFixed(2)}%)
-            </li>
-          ))}
+          {recomendaciones.map((titulo, index) => (
+          <li key={index}>{titulo}</li>
+      ))} 
         </ul>
       )}
 
       {!loading && buscado && recomendaciones.length === 0 && (
+
         <p>No se encontraron recomendaciones.</p>
       )}
     </div>

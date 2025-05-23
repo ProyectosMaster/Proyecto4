@@ -1,8 +1,5 @@
 flask
 flask-cors
-requests
-sentence-transformers
-scikit-learn
 torch
 supabase
 tf-keras
