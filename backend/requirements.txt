@@ -1,5 +1,10 @@
 flask
 flask-cors
-torch
+requests
+pandas
+numpy
+python-dotenv
 supabase
-tf-keras
+sentence_transformers
+cassandra-driver
+

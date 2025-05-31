@@ -8,6 +8,7 @@ type Pelicula = {
   sinopsis: string;
   score: number;
   img_path: string;
+  seen: boolean
 };
 
 const DetallePelicula = ({ pelicula, onClose }: { pelicula: Pelicula; onClose: () => void }) => (
@@ -19,6 +20,7 @@ const DetallePelicula = ({ pelicula, onClose }: { pelicula: Pelicula; onClose: (
     <p><strong>Valoración:</strong> {pelicula.score.toFixed(2)}</p>
   </div>
 );
+console.log(localStorage.getItem('isAuthenticated'))
 
 const Pelis = () => {
   const [recomendaciones, setRecomendaciones] = useState<Pelicula[]>([]);
@@ -27,7 +29,7 @@ const Pelis = () => {
 
   useEffect(() => {
     setLoading(true);
-    axios.get("http://localhost:5000/api/pelis")
+    axios.get("http://localhost:5000/api/pelis",{ withCredentials: true })
       .then((res) => setRecomendaciones(res.data))
       .catch((error) => {
         console.error("Error al obtener recomendaciones", error);

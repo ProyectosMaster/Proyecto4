@@ -1,2 +1,0 @@
-- Para instalar lo necesario: pip install -r requirements.txt
-- Para iniciar el servidor flask: python app.py

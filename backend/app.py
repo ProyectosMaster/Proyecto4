@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, session
 from flask_cors import CORS
 import requests
 import hashlib
@@ -7,22 +7,39 @@ import os
 import numpy as np
 import pickle
 import ast
+import json
 from datetime import datetime
 from supabase import create_client
+from cassandra.cluster import Cluster
+from cassandra.auth import PlainTextAuthProvider
+
+# Clases de embeddings
 from vector_recomendation import MovieRecommender
 from recommender import SentenceTransformerRecommender
 
 
 app = Flask(__name__)
-CORS(app)  # Permite peticiones desde React
+CORS(app, supports_credentials=True)  # Permite peticiones desde React
+app.secret_key = "1234"
+
+cloud_config = {
+    "secure_connect_bundle": "credenciales_cassandra/secure-connect-proyecto-recomendacion.zip"
+}
+with open("credenciales_cassandra/proyecto-recomendacion-token.json") as f:
+    secrets = json.load(f)
+
+CLIENT_ID = secrets["clientId"]
+CLIENT_SECRET = secrets["secret"]
+
+auth_provider = PlainTextAuthProvider(CLIENT_ID, CLIENT_SECRET)
+cluster = Cluster(cloud=cloud_config, auth_provider=auth_provider)
+cassandra_session = cluster.connect("recomendaciones")
 
 SUPABASE_URL = "https://bpfdmufpudgtnnasfwin.supabase.co"
 SUPABASE_API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwZmRtdWZwdWRndG5uYXNmd2luIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NzUwMDYwNSwiZXhwIjoyMDYzMDc2NjA1fQ.g912fWjyaD4Xww968ktEkhu7WXMRt4FD-_Vmx9BDYOM"
 TABLE_NAME = "users"
 
-path_file = os.path.join(
-    os.path.dirname(__file__), "../../ruben/data/clean_data/movies_clean.csv"
-)
+path_file = os.path.join(os.path.dirname(__file__), "data", "movies_clean.csv")
 df_movies = pd.read_csv(path_file)
 df_movies["vector"] = df_movies["vector"].apply(
     ast.literal_eval
@@ -79,6 +96,7 @@ def login():
     res = requests.get(query_url, headers=headers)
     users = res.json()
     if users:
+        session["username"] = username
         return jsonify({"success": True})
     else:
         return jsonify({"error": "Credenciales incorrectas"}), 401
@@ -86,6 +104,7 @@ def login():
 
 @app.route("/api/recomendacion", methods=["POST"])
 def recomendacion():
+
     data = request.get_json()
     titulo_input = data.get("pelicula")
     # print(f"[DEBUG] Película buscada: {titulo_input}")
@@ -143,67 +162,92 @@ def sugerencias():
 
 @app.route("/api/pelis", methods=["GET"])
 def recomendaciones_personalizadas():
-    # data = request.get_json()
-    # titulo_input = data.get("pelicula")
-    # print(f"[DEBUG] Película buscada: {titulo_input}")
 
-    # if not titulo_input:
-    #     return jsonify({"error": "Película no proporcionada"}), 400
+    username = session.get("username")
+    user_code = int(username)
 
-    # 1. Obtener todas las películas desde Supabase
-    # headers = {
-    #     "apikey": SUPABASE_API_KEY,
-    #     "Authorization": f"Bearer {SUPABASE_API_KEY}",
-    # }
-    # response = requests.get(
-    #     f"{SUPABASE_URL}/rest/v1/peliculas?select=id,title,overview", headers=headers
-    # )
-    with open("user_factors.pkl", "rb") as f:
+    # Verificar si ya existen recomendaciones
+    rows = cassandra_session.execute(
+        "SELECT * FROM recommendations WHERE user_id = %s", (user_code,)
+    )
+    existing_recs = list(rows)
+
+    if existing_recs:
+        recomendaciones = [
+            {
+                "movieId": row.movie_id,
+                "titulo": row.titulo,
+                "sinopsis": row.sinopsis,
+                "score": row.score,
+                "img_path": row.img_path,
+                "seen": row.seen,
+            }
+            for row in existing_recs
+            if not row.seen  # solo las no vistas
+        ]
+        return jsonify(recomendaciones)
+
+    # Si no existen, generar usando ALS
+    with open("modelo_ALS/user_factors.pkl", "rb") as f:
         user_factors = pickle.load(f)
-
-    with open(f"item_factors.pkl", "rb") as f:
+    with open("modelo_ALS/item_factors.pkl", "rb") as f:
         item_factors = pickle.load(f)
-    # Convertir listas a arrays NumPy
-    user_factors["features"] = user_factors["features"].apply(lambda x: np.array(x))
-    item_factors["features"] = item_factors["features"].apply(lambda x: np.array(x))
 
-    # Crear índice para acceso rápido
+    user_factors["features"] = user_factors["features"].apply(np.array)
+    item_factors["features"] = item_factors["features"].apply(np.array)
+
     user_factors.set_index("id", inplace=True)
     item_factors.set_index("id", inplace=True)
 
-    user_id = 123
+    if user_code not in user_factors.index:
+        return "Usuario no existe"
 
-    if user_id not in user_factors.index:
-        return jsonify([])
-
-    user_vec = user_factors.loc[user_id, "features"]
-    # Sin el rango definido entre 0.5 y 5
+    user_vec = user_factors.loc[user_code, "features"]
     item_scores = item_factors["features"].apply(lambda x: np.dot(user_vec, x))
-
     top_items = item_scores.sort_values(ascending=False).head(80)
     serie_desordenada = top_items.sample(frac=1)
 
     recomendaciones = []
+    insert_stmt = cassandra_session.prepare(
+        """
+        INSERT INTO recommendations (user_id, movie_id, score, titulo, sinopsis, img_path, seen)
+        VALUES (?, ?, ?, ?, ?, ?, false)
+    """
+    )
 
     for movie_id, score in serie_desordenada.items():
-        recomendaciones.append(
-            {
-                "movieId": int(movie_id),
-                "titulo": df_movies[df_movies["id"] == int(movie_id)]["title"].values[
-                    0
-                ],
-                "sinopsis": df_movies[df_movies["id"] == int(movie_id)][
-                    "overview"
-                ].values[0],
-                "score": float(score),
-                "img_path": df_movies[df_movies["id"] == int(movie_id)][
-                    "poster_path"
-                ].values[0],
-            }
+        movie_row = df_movies[df_movies["id"] == int(movie_id)]
+        if movie_row.empty:
+            continue
+        titulo = movie_row["title"].values[0]
+        sinopsis = movie_row["overview"].values[0]
+        img_path = movie_row["poster_path"].values[0]
+
+        rec = {
+            "movieId": int(movie_id),
+            "titulo": titulo,
+            "sinopsis": sinopsis,
+            "score": float(score),
+            "img_path": img_path,
+            "seen": False,
+        }
+        recomendaciones.append(rec)
+
+        # Insertar en Cassandra
+        cassandra_session.execute(
+            insert_stmt,
+            (
+                user_code,
+                rec["movieId"],
+                rec["score"],
+                rec["titulo"],
+                rec["sinopsis"],
+                rec["img_path"],
+            ),
         )
 
     return jsonify(recomendaciones)
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=True)

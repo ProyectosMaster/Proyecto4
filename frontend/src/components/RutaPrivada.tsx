@@ -1,9 +1,10 @@
+import React from 'react';
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { isAuthenticated } from '../auth';
 
 type Props = {
-  children: JSX.Element;
+  children: React.ReactNode;
 };
 
 const RutaPrivada = ({ children }: Props) => {
