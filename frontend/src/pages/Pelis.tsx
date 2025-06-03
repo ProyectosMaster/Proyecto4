@@ -8,19 +8,31 @@ type Pelicula = {
   sinopsis: string;
   score: number;
   img_path: string;
-  seen: boolean
+  seen: boolean;
 };
 
-const DetallePelicula = ({ pelicula, onClose }: { pelicula: Pelicula; onClose: () => void }) => (
+const DetallePelicula = ({
+  pelicula,
+  onClose,
+  onEventoUsuario
+}: {
+  pelicula: Pelicula;
+  onClose: () => void;
+  onEventoUsuario: (accion: string) => void;
+}) => (
   <div className="detalle">
     <span className="cerrar" onClick={onClose}>✖</span>
     <h2>{pelicula.titulo}</h2>
-    <img src={`/${pelicula.img_path}`} alt={pelicula.titulo} />
+    {/* <img src={`/${pelicula.img_path}`} alt={pelicula.titulo} /> */}
     <p><strong>Sinopsis:</strong> {pelicula.sinopsis}</p>
     <p><strong>Valoración:</strong> {pelicula.score.toFixed(2)}</p>
+    <div style={{ marginTop: "10px" }}>
+      <button onClick={() => onEventoUsuario("visto")}>✅ Marcar como visto</button>
+      <button onClick={() => onEventoUsuario("like")}>👍 Me gusta</button>
+      <button onClick={() => onEventoUsuario("dislike")}>👎 No me gusta</button>
+    </div>
   </div>
 );
-console.log(localStorage.getItem('isAuthenticated'))
 
 const Pelis = () => {
   const [recomendaciones, setRecomendaciones] = useState<Pelicula[]>([]);
@@ -29,7 +41,7 @@ const Pelis = () => {
 
   useEffect(() => {
     setLoading(true);
-    axios.get("http://localhost:5000/api/pelis",{ withCredentials: true })
+    axios.get("http://localhost:5000/api/pelis", { withCredentials: true })
       .then((res) => setRecomendaciones(res.data))
       .catch((error) => {
         console.error("Error al obtener recomendaciones", error);
@@ -37,6 +49,19 @@ const Pelis = () => {
       })
       .finally(() => setLoading(false));
   }, []);
+
+  const enviarEventoUsuario = async (movieId: number, accion: string) => {
+    try {
+      await axios.post("http://localhost:5000/api/evento", {
+        movie_id: movieId,
+        accion
+      }, { withCredentials: true });
+
+      console.log(`Evento enviado: ${accion} para película ${movieId}`);
+    } catch (err) {
+      console.error("Error al enviar evento", err);
+    }
+  };
 
   const contenido = [];
   for (let i = 0; i < recomendaciones.length; i++) {
@@ -52,11 +77,14 @@ const Pelis = () => {
       </div>
     );
 
-    
     if (seleccionada === peli.movieId) {
       contenido.push(
         <div key={`detalle-${peli.movieId}`} className="detalle">
-          <DetallePelicula pelicula={peli} onClose={() => setSeleccionada(null)} />
+          <DetallePelicula
+            pelicula={peli}
+            onClose={() => setSeleccionada(null)}
+            onEventoUsuario={(accion) => enviarEventoUsuario(peli.movieId, accion)}
+          />
         </div>
       );
     }

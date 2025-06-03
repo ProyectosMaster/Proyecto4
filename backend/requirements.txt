@@ -7,4 +7,5 @@ python-dotenv
 supabase
 sentence_transformers
 cassandra-driver
+kafka-python
 

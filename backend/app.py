@@ -8,20 +8,31 @@ import numpy as np
 import pickle
 import ast
 import json
+import time
+import uuid
 from datetime import datetime
 from supabase import create_client
 from cassandra.cluster import Cluster
 from cassandra.auth import PlainTextAuthProvider
+from cassandra.query import SimpleStatement
+
+# from kafka import KafkaProducer
+# from kafka.errors import NoBrokersAvailable
 
 # Clases de embeddings
 from vector_recomendation import MovieRecommender
 from recommender import SentenceTransformerRecommender
+
+# Funciones de Kafka (consumer y producer)
+from kafka_functions import producer as prod
+from kafka_functions import consumer
 
 
 app = Flask(__name__)
 CORS(app, supports_credentials=True)  # Permite peticiones desde React
 app.secret_key = "1234"
 
+# Base de datos no relacional (Cassandra)
 cloud_config = {
     "secure_connect_bundle": "credenciales_cassandra/secure-connect-proyecto-recomendacion.zip"
 }
@@ -35,15 +46,21 @@ auth_provider = PlainTextAuthProvider(CLIENT_ID, CLIENT_SECRET)
 cluster = Cluster(cloud=cloud_config, auth_provider=auth_provider)
 cassandra_session = cluster.connect("recomendaciones")
 
+# Base de datos de usuarios
 SUPABASE_URL = "https://bpfdmufpudgtnnasfwin.supabase.co"
 SUPABASE_API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwZmRtdWZwdWRndG5uYXNmd2luIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NzUwMDYwNSwiZXhwIjoyMDYzMDc2NjA1fQ.g912fWjyaD4Xww968ktEkhu7WXMRt4FD-_Vmx9BDYOM"
 TABLE_NAME = "users"
 
+
+# Pasar los embeddings a formato lista
 path_file = os.path.join(os.path.dirname(__file__), "data", "movies_clean.csv")
 df_movies = pd.read_csv(path_file)
 df_movies["vector"] = df_movies["vector"].apply(
     ast.literal_eval
 )  # Convierte de str a lista
+
+
+producer = prod()
 
 
 @app.route("/api/users", methods=["GET"])
@@ -204,7 +221,7 @@ def recomendaciones_personalizadas():
 
     user_vec = user_factors.loc[user_code, "features"]
     item_scores = item_factors["features"].apply(lambda x: np.dot(user_vec, x))
-    top_items = item_scores.sort_values(ascending=False).head(80)
+    top_items = item_scores.sort_values(ascending=False).head(120)
     serie_desordenada = top_items.sample(frac=1)
 
     recomendaciones = []
@@ -247,6 +264,30 @@ def recomendaciones_personalizadas():
         )
 
     return jsonify(recomendaciones)
+
+
+@app.route("/api/evento", methods=["POST"])
+def evento_usuario():
+    data = request.get_json()
+    movie_id = data.get("movie_id")
+    accion = data.get("accion")
+    username = session.get("username")
+
+    if not movie_id or not accion:
+        return jsonify({"error": "Faltan datos"}), 400
+
+    evento = {
+        "usuario": username,
+        "pelicula_id": movie_id,
+        "accion": accion,
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+
+    producer.send("eventos_peliculas", evento)
+
+    # Envío los eventos a cassandra utlizando un consumer que escucha el topic "eventos_peliculas"
+    consumer(cassandra_session)
+    return jsonify({"ok": True, "evento": evento})
 
 
 if __name__ == "__main__":
