@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
-import BotonAuth from "../components/BotonAuth";
 
 type Pelicula = {
   movieId: number;
@@ -103,8 +102,6 @@ const Pelis = () => {
           {contenido}
         </div>
       )}
-
-      <BotonAuth />
 
       <style>{`
         .contenedor-principal {

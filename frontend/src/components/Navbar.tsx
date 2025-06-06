@@ -18,10 +18,17 @@ const Navbar = () => {
       color: "white"
     }}>
       <div style={{ display: "flex", gap: "1rem" }}>
-        <Link to="/" style={{ color: "white", textDecoration: "none" }}>Home</Link>
-        <Link to="/datos" style={{ color: "white", textDecoration: "none" }}>Datos</Link>
-        <Link to="/pelis" style={{ color: "white", textDecoration: "none" }}>Pelis</Link>
-        <Link to="/recomendacion" style={{ color: "white", textDecoration: "none" }}>Recomendación</Link>
+        {isAuthenticated() ? (
+          <>
+            <Link to="/pelis" style={{ color: "white", textDecoration: "none" }}>Pelis</Link>
+            <Link to="/recomendacion" style={{ color: "white", textDecoration: "none" }}>Recomendación</Link>
+          </>
+        ) : (
+          <>
+            <Link to="/" style={{ color: "white", textDecoration: "none" }}>Home</Link>
+            <Link to="/datos" style={{ color: "white", textDecoration: "none" }}>Datos</Link>
+          </>
+        )}
       </div>
 
       <div style={{ display: "flex", gap: "1rem" }}>
