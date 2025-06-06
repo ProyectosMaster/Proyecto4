@@ -15,7 +15,8 @@ const Navbar = () => {
       justifyContent: "space-between",
       padding: "1rem",
       background: "#282c34",
-      color: "white"
+      color: "white",
+      margin: "0",
     }}>
       <div style={{ display: "flex", gap: "1rem" }}>
         {isAuthenticated() ? (
