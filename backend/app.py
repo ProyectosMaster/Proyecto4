@@ -8,16 +8,11 @@ import numpy as np
 import pickle
 import ast
 import json
-import time
-import uuid
+import random
 from datetime import datetime
 from supabase import create_client
 from cassandra.cluster import Cluster
 from cassandra.auth import PlainTextAuthProvider
-from cassandra.query import SimpleStatement
-
-# from kafka import KafkaProducer
-# from kafka.errors import NoBrokersAvailable
 
 # Clases de embeddings
 from vector_recomendation import MovieRecommender
@@ -25,7 +20,7 @@ from recommender import SentenceTransformerRecommender
 
 # Funciones de Kafka (consumer y producer)
 from kafka_functions import producer as prod
-from kafka_functions import consumer
+from kafka_functions import consumer, actualizar_cassandra, peliculas_vistas
 
 
 app = Flask(__name__)
@@ -147,8 +142,6 @@ def recomendacion():
 
     recomendaciones = results["title"].tolist()
 
-    # recomendaciones = [{"titulo": results["title"].values}]
-
     return jsonify(recomendaciones)
 
 
@@ -183,6 +176,9 @@ def recomendaciones_personalizadas():
     username = session.get("username")
     user_code = int(username)
 
+    actualizar_cassandra(user_code, cassandra_session)
+    peliculas_ya_vistas = peliculas_vistas(user_code, cassandra_session, df_movies)
+
     # Verificar si ya existen recomendaciones
     rows = cassandra_session.execute(
         "SELECT * FROM recommendations WHERE user_id = %s", (user_code,)
@@ -202,7 +198,9 @@ def recomendaciones_personalizadas():
             for row in existing_recs
             if not row.seen  # solo las no vistas
         ]
-        return jsonify(recomendaciones)
+        return jsonify(
+            {"recomendaciones": recomendaciones, "vistas": peliculas_ya_vistas}
+        )
 
     # Si no existen, generar usando ALS
     with open("modelo_ALS/user_factors.pkl", "rb") as f:
@@ -263,7 +261,7 @@ def recomendaciones_personalizadas():
             ),
         )
 
-    return jsonify(recomendaciones)
+    return jsonify({"recomendaciones": recomendaciones, "vistas": peliculas_ya_vistas})
 
 
 @app.route("/api/evento", methods=["POST"])

@@ -23,7 +23,6 @@ const DetallePelicula = ({
   <div className="detalle">
     <span className="cerrar" onClick={onClose}>✖</span>
     <h2>{pelicula.titulo}</h2>
-    {/* <img src={`/${pelicula.img_path}`} alt={pelicula.titulo} /> */}
     <p><strong>Sinopsis:</strong> {pelicula.sinopsis}</p>
     <p><strong>Valoración:</strong> {pelicula.score.toFixed(2)}</p>
     <div style={{ marginTop: "10px" }}>
@@ -35,6 +34,7 @@ const DetallePelicula = ({
 );
 
 const Pelis = () => {
+  const [vistas, setVistas] = useState<Pelicula[]>([]);
   const [recomendaciones, setRecomendaciones] = useState<Pelicula[]>([]);
   const [loading, setLoading] = useState(false);
   const [seleccionada, setSeleccionada] = useState<number | null>(null);
@@ -42,9 +42,14 @@ const Pelis = () => {
   useEffect(() => {
     setLoading(true);
     axios.get("http://localhost:5000/api/pelis", { withCredentials: true })
-      .then((res) => setRecomendaciones(res.data))
+      .then((res) => {
+        const { vistas, recomendaciones } = res.data;
+        setVistas(vistas || []);
+        setRecomendaciones(recomendaciones || []);
+      })
       .catch((error) => {
         console.error("Error al obtener recomendaciones", error);
+        setVistas([]);
         setRecomendaciones([]);
       })
       .finally(() => setLoading(false));
@@ -63,44 +68,60 @@ const Pelis = () => {
     }
   };
 
-  const contenido = [];
-  for (let i = 0; i < recomendaciones.length; i++) {
-    const peli = recomendaciones[i];
-    contenido.push(
-      <div
-        key={peli.movieId}
-        className="item"
-        onClick={() => setSeleccionada(peli.movieId === seleccionada ? null : peli.movieId)}
-      >
-        <img src={`/${peli.img_path}`} alt={peli.titulo} />
-        <p>{peli.titulo}</p>
-      </div>
-    );
+  const renderPeliculas = (peliculas: Pelicula[], mostrarDetalle = true) => {
+    const elementos = [] as React.ReactElement[]
 
-    if (seleccionada === peli.movieId) {
-      contenido.push(
-        <div key={`detalle-${peli.movieId}`} className="detalle">
-          <DetallePelicula
-            pelicula={peli}
-            onClose={() => setSeleccionada(null)}
-            onEventoUsuario={(accion) => enviarEventoUsuario(peli.movieId, accion)}
-          />
+    for (const peli of peliculas) {
+      elementos.push(
+        <div
+          key={peli.movieId}
+          className="item"
+          onClick={() => {
+            if (mostrarDetalle) {
+              setSeleccionada(peli.movieId === seleccionada ? null : peli.movieId);
+            }
+          }}
+        >
+          <img src={`/${peli.img_path}`} alt={peli.titulo} />
+          <p>{peli.titulo}</p>
         </div>
       );
+
+      if (mostrarDetalle && seleccionada === peli.movieId) {
+        elementos.push(
+          <div key={`detalle-${peli.movieId}`} className="detalle">
+            <DetallePelicula
+              pelicula={peli}
+              onClose={() => setSeleccionada(null)}
+              onEventoUsuario={(accion) => enviarEventoUsuario(peli.movieId, accion)}
+            />
+          </div>
+        );
+      }
     }
-  }
+
+    return elementos;
+  };
 
   return (
     <div>
-      <h1 style={{ textAlign: "center", color: "red" }}>Películas Recomendadas</h1>
+      <h2 style={{ textAlign: "center", color: "gray" }}>Películas Ya Vistas</h2>
+      {vistas.length > 0 ? (
+        <div className="contenedor-principal">
+          {renderPeliculas(vistas, false)}
+        </div>
+      ) : (
+        <p style={{ textAlign: "center", color: "gray" }}>No has visto ninguna película aún.</p>
+      )}
 
+      <h1 style={{ textAlign: "center", color: "red" }}>Películas Recomendadas</h1>
       {loading ? (
         <div style={{ marginTop: "1rem" }}>
           <span style={{ fontSize: "1rem" }}>⏳</span> Buscando recomendaciones...
         </div>
       ) : (
         <div className="contenedor-principal">
-          {contenido}
+          {renderPeliculas(recomendaciones)}
         </div>
       )}
 
