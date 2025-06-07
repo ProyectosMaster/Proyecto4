@@ -57,20 +57,26 @@ def consumer(session):
 
 def actualizar_cassandra(usuario, session):
     # Obtener movie_ids de eventos_usuario con acción "visto"
-    rows_eventos = session.execute(
-        "SELECT movie_id FROM eventos_usuario WHERE user_id = %s AND accion = 'visto'",
-        (usuario,),
+
+    check_user_stmt = session.prepare(
+        "SELECT movie_id FROM recommendations WHERE user_id = ? LIMIT 1"
     )
-    peliculas_vistas = {row.movie_id for row in rows_eventos}
-
-    # Solo si hay películas vistas, UPDATE
-    if peliculas_vistas:
-        update_seen_stmt = session.prepare(
-            "UPDATE recommendations SET seen = true WHERE user_id = ? AND movie_id = ?"
+    result = session.execute(check_user_stmt, (usuario,))
+    if result.one():
+        rows_eventos = session.execute(
+            "SELECT movie_id FROM eventos_usuario WHERE user_id = %s AND accion = 'visto'",
+            (usuario,),
         )
+        peliculas_vistas = {row.movie_id for row in rows_eventos}
 
-        for movie_id in peliculas_vistas:
-            session.execute(update_seen_stmt, (usuario, movie_id))
+        # Solo si hay películas vistas, UPDATE
+        if peliculas_vistas:
+            update_seen_stmt = session.prepare(
+                "UPDATE recommendations SET seen = true WHERE user_id = ? AND movie_id = ?"
+            )
+
+            for movie_id in peliculas_vistas:
+                session.execute(update_seen_stmt, (usuario, movie_id))
 
 
 def peliculas_vistas(usuario, session, df_peliculas):

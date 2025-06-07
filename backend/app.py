@@ -46,11 +46,15 @@ SUPABASE_URL = "https://bpfdmufpudgtnnasfwin.supabase.co"
 SUPABASE_API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwZmRtdWZwdWRndG5uYXNmd2luIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NzUwMDYwNSwiZXhwIjoyMDYzMDc2NjA1fQ.g912fWjyaD4Xww968ktEkhu7WXMRt4FD-_Vmx9BDYOM"
 TABLE_NAME = "users"
 
-
 # Pasar los embeddings a formato lista
 path_file = os.path.join(os.path.dirname(__file__), "data", "movies_clean.csv")
 df_movies = pd.read_csv(path_file)
+
 df_movies["vector"] = df_movies["vector"].apply(
+    ast.literal_eval
+)  # Convierte de str a lista
+
+df_movies["vector_titulo"] = df_movies["vector_titulo"].apply(
     ast.literal_eval
 )  # Convierte de str a lista
 
@@ -116,31 +120,25 @@ def login():
 
 @app.route("/api/recomendacion", methods=["POST"])
 def recomendacion():
-
     data = request.get_json()
-    titulo_input = data.get("pelicula")
-    # print(f"[DEBUG] Película buscada: {titulo_input}")
+    texto_input = data.get("pelicula")
+    tipo_busqueda = data.get("select")
 
-    if not titulo_input:
+    if not texto_input:
         return jsonify({"error": "Película no proporcionada"}), 400
 
-    # 1. Obtener todas las películas desde Supabase
-    headers = {
-        "apikey": SUPABASE_API_KEY,
-        "Authorization": f"Bearer {SUPABASE_API_KEY}",
-    }
-    response = requests.get(
-        f"{SUPABASE_URL}/rest/v1/peliculas?select=id,title,overview", headers=headers
-    )
     st_model = SentenceTransformerRecommender()
     recommender = MovieRecommender(st_model, df_movies)
 
-    results = []
+    recomendaciones = []
 
-    if titulo_input.strip():
-        results = recommender.get_recommendations(titulo_input)
+    if texto_input.strip():
+        if tipo_busqueda == "titulo":
+            results = recommender.get_recommendations(texto_input, tipo="titulo")
+        else:
+            results = recommender.get_recommendations(texto_input, tipo="descripcion")
 
-    recomendaciones = results["title"].tolist()
+        recomendaciones = results.to_dict(orient="records")
 
     return jsonify(recomendaciones)
 

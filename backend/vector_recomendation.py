@@ -6,16 +6,28 @@ class MovieRecommender:
     def __init__(self, model, database):
         self.model = model
         self.database = database.copy()
-        self.database_emb = np.stack(self.database["vector"].values)
+        self.database_emb_des = np.stack(self.database["vector"].values)
+        self.database_emb_title = np.stack(self.database["vector_titulo"].values)
 
-    def get_recommendations(self, new_overview, top_n=5, order_by_vote: bool = False):
+    def get_recommendations(
+        self, new_overview, tipo, top_n=12, order_by_vote: bool = False
+    ):
 
         new_overview_emb = self.model.encode(new_overview)
-        similarities = calculate_similarity(self.database_emb, new_overview_emb)
-        top_indices = similarities.argsort()[-top_n:][::-1]
-        recommendations = self.database.iloc[top_indices][
-            ["title", "overview", "vote_average"]
-        ]
+        if tipo == "titulo":
+            similarities = calculate_similarity(
+                self.database_emb_title, new_overview_emb
+            )
+            top_indices = similarities.argsort()[-top_n:][::-1]
+            recommendations = self.database.iloc[top_indices][
+                ["id", "title", "overview", "vote_average", "poster_path"]
+            ]
+        else:
+            similarities = calculate_similarity(self.database_emb_des, new_overview_emb)
+            top_indices = similarities.argsort()[-top_n:][::-1]
+            recommendations = self.database.iloc[top_indices][
+                ["id", "title", "overview", "vote_average", "poster_path"]
+            ]
 
         if order_by_vote:
             recommendations = recommendations.sort_values(
