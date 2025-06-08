@@ -12,6 +12,12 @@ class MovieRecommender:
     def get_recommendations(
         self, new_overview, tipo, top_n=12, order_by_vote: bool = False
     ):
+        """
+        Función que recibe como parámetros:
+        - Texto a pasar a embedding para luego comparar con los demás.
+        - Tipo: puede ser o título o descripción para que haga una búsqueda de los más parecidos según el parámetro.
+        Devuelve la información de las 12 películas más parecidas para enviarla al frontend
+        """
 
         new_overview_emb = self.model.encode(new_overview)
         if tipo == "titulo":

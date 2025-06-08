@@ -7,6 +7,9 @@ import time
 
 
 def producer():
+    """
+    Función que conecta con el contenedor de kafka ya que a veces tarda un poco en ejecutarse
+    """
     for i in range(10):
 
         try:
@@ -22,6 +25,11 @@ def producer():
 
 
 def consumer(session):
+    """
+    Función que recibe como parámetro la sesión de Cassandra para la ingesta de datos:
+    Primero escucha al puerto donde se encuentra el topic con la información y después
+    la inserta en la tabla de Casssandra.
+    """
 
     consumer = KafkaConsumer(
         "eventos_peliculas",
@@ -56,7 +64,13 @@ def consumer(session):
 
 
 def actualizar_cassandra(usuario, session):
-    # Obtener movie_ids de eventos_usuario con acción "visto"
+    """
+    Función que recibe como parámetros el id del usuario que ha iniciado sesión y la sesión de Cassandra.
+    - Primero comprueba que haya recomendaciones en la base de datos, ya que sino la función daría un error al intentar filtrar.
+    - Al comprobar lo anterior, consulta en la tabla de eventos los eventos que tengan la acción como 'visto'.
+    - Por último, filtra para actualizar la columna de la tabla de recomendaciones y marcarla como true para que ya no se
+    muestren en la parte de recomendaciones sino en la sección de películas vistas.
+    """
 
     check_user_stmt = session.prepare(
         "SELECT movie_id FROM recommendations WHERE user_id = ? LIMIT 1"
@@ -80,6 +94,9 @@ def actualizar_cassandra(usuario, session):
 
 
 def peliculas_vistas(usuario, session, df_peliculas):
+    """
+    Función que devuelve la información de las películas que ha visto el usuario.
+    """
     rows_eventos = session.execute(
         "SELECT movie_id FROM eventos_usuario WHERE user_id = %s AND accion = 'visto' ALLOW FILTERING",
         (usuario,),

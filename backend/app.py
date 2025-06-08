@@ -36,12 +36,12 @@ with open("credenciales_cassandra/proyecto-recomendacion-token.json") as f:
 
 CLIENT_ID = secrets["clientId"]
 CLIENT_SECRET = secrets["secret"]
-
+# Conexion al cluster
 auth_provider = PlainTextAuthProvider(CLIENT_ID, CLIENT_SECRET)
 cluster = Cluster(cloud=cloud_config, auth_provider=auth_provider)
 cassandra_session = cluster.connect("recomendaciones")
 
-# Base de datos de usuarios
+# Base de datos SQL de usuarios
 SUPABASE_URL = "https://bpfdmufpudgtnnasfwin.supabase.co"
 SUPABASE_API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwZmRtdWZwdWRndG5uYXNmd2luIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NzUwMDYwNSwiZXhwIjoyMDYzMDc2NjA1fQ.g912fWjyaD4Xww968ktEkhu7WXMRt4FD-_Vmx9BDYOM"
 TABLE_NAME = "users"
@@ -58,12 +58,16 @@ df_movies["vector_titulo"] = df_movies["vector_titulo"].apply(
     ast.literal_eval
 )  # Convierte de str a lista
 
-
+# Producer de Kafka
 producer = prod()
 
 
 @app.route("/api/users", methods=["GET"])
 def get_users():
+    """
+    Función que muestra todos los usuarios y contraseñas hasheadas de
+    la base de datos SQL
+    """
     headers = {
         "apikey": SUPABASE_API_KEY,
         "Authorization": f"Bearer {SUPABASE_API_KEY}",
@@ -75,6 +79,11 @@ def get_users():
 
 @app.route("/api/registro", methods=["POST"])
 def registro():
+    """
+    Función que realiza el registro de un usuario (recibe los datos por POST).
+    No funciona como registro real ya que el usuario debe de estar en el csv de ratings para
+    que se generen las recomendaciones de películas.
+    """
     data = request.get_json()
     username = data["username"]
     password = hashlib.sha256(data["password"].encode()).hexdigest()
@@ -99,6 +108,10 @@ def registro():
 
 @app.route("/api/login", methods=["POST"])
 def login():
+    """
+    Función que realiza el login del usuario en la aplicación comprobando
+    que los datos se encuentran en la base de datos.
+    """
     data = request.get_json()
     username = data["username"]
     password = hashlib.sha256(data["password"].encode()).hexdigest()
@@ -120,6 +133,10 @@ def login():
 
 @app.route("/api/recomendacion", methods=["POST"])
 def recomendacion():
+    """
+    Función que obtiene mediante POST tanto información (de la plantilla Recomendacion.tsx) del texto recibido
+    como de un select que dependiendo si el valor es titulo o descripción hace una busqueda de peliculas parecidas.
+    """
     data = request.get_json()
     texto_input = data.get("pelicula")
     tipo_busqueda = data.get("select")
@@ -145,6 +162,10 @@ def recomendacion():
 
 @app.route("/api/sugerencias", methods=["GET"])
 def sugerencias():
+    """
+    Función experimental que cuando introduces palabras en la caja de texto de la plantilla Recomendacion.tsx
+    hace búsquedas en la base de datos para encontrar títulos de películas que coinciden.
+    """
 
     SUPABASE_URL = "https://bpfdmufpudgtnnasfwin.supabase.co"
     SUPABASE_API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwZmRtdWZwdWRndG5uYXNmd2luIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NzUwMDYwNSwiZXhwIjoyMDYzMDc2NjA1fQ.g912fWjyaD4Xww968ktEkhu7WXMRt4FD-_Vmx9BDYOM"
@@ -170,10 +191,15 @@ def sugerencias():
 
 @app.route("/api/pelis", methods=["GET"])
 def recomendaciones_personalizadas():
+    """
+    Función que primero comprueba si existen recomendaciones para dicho usuario en Cassandra:
+    - En caso afirmativo, las devuelve.
+    - En caso contrario, las genera llamando al modelo ALS con los .pickle (top 120 películas), las guarda en Cassandra y las envía al front.
+    """
 
     username = session.get("username")
     user_code = int(username)
-
+    # Funciones explicadas en kafka_functions.py
     actualizar_cassandra(user_code, cassandra_session)
     peliculas_ya_vistas = peliculas_vistas(user_code, cassandra_session, df_movies)
 
@@ -264,6 +290,11 @@ def recomendaciones_personalizadas():
 
 @app.route("/api/evento", methods=["POST"])
 def evento_usuario():
+    """
+    Función que recibe información sobre un evento lanzado por el usuario (click a marcar como visto, me gusta o no me gusta)
+    y mediante un producer lo envía al topic eventos_pelicula en el que un consumer (Cassandra) está escuchando para guardar dicha información
+    en la base de datos de Cassandra.
+    """
     data = request.get_json()
     movie_id = data.get("movie_id")
     accion = data.get("accion")

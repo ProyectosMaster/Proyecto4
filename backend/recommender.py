@@ -6,6 +6,11 @@ import os
 
 
 class SentenceTransformerRecommender:
+    """
+    Clase que se encarga de pasar a embeddings texto utilizando el modelo declarado abajo.
+    Además, tiene una función que calcula la similitud coseno entre dos embeddings.
+    """
+
     def __init__(self, model_name="all-MiniLM-L6-v2"):
         self.model = SentenceTransformer(model_name)
 
