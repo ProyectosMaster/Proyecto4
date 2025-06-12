@@ -20,7 +20,12 @@ from recommender import SentenceTransformerRecommender
 
 # Funciones de Kafka (consumer y producer)
 from kafka_functions import producer as prod
-from kafka_functions import consumer, actualizar_cassandra, peliculas_vistas
+from kafka_functions import (
+    consumer,
+    actualizar_cassandra,
+    peliculas_vistas,
+    peliculas_like,
+)
 
 
 app = Flask(__name__)
@@ -60,6 +65,9 @@ df_movies["vector_titulo"] = df_movies["vector_titulo"].apply(
 
 # Producer de Kafka
 producer = prod()
+
+st_model = SentenceTransformerRecommender()
+recommender = MovieRecommender(st_model, df_movies)
 
 
 @app.route("/api/users", methods=["GET"])
@@ -199,9 +207,11 @@ def recomendaciones_personalizadas():
 
     username = session.get("username")
     user_code = int(username)
+
     # Funciones explicadas en kafka_functions.py
     actualizar_cassandra(user_code, cassandra_session)
     peliculas_ya_vistas = peliculas_vistas(user_code, cassandra_session, df_movies)
+    peliculas_like(user_code, cassandra_session, df_movies, recommender)
 
     # Verificar si ya existen recomendaciones
     rows = cassandra_session.execute(

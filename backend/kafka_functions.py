@@ -4,6 +4,7 @@ from kafka.errors import NoBrokersAvailable
 from datetime import datetime
 import json
 import time
+import numpy as np
 
 
 def producer():
@@ -124,3 +125,92 @@ def peliculas_vistas(usuario, session, df_peliculas):
         peliculas_vistas.append(rec)
 
     return peliculas_vistas
+
+
+def peliculas_like(usuario, session, df_peliculas, recommender):
+    # películas con "like"
+    rows_eventos_like = session.execute(
+        "SELECT movie_id FROM eventos_usuario WHERE user_id = %s AND accion = 'like' ALLOW FILTERING",
+        (usuario,),
+    )
+    peliculas_con_like = {row.movie_id for row in rows_eventos_like}
+
+    # películas con "dislike"
+    rows_eventos_dislike = session.execute(
+        "SELECT movie_id FROM eventos_usuario WHERE user_id = %s AND accion = 'dislike' ALLOW FILTERING",
+        (usuario,),
+    )
+    peliculas_con_dislike = {row.movie_id for row in rows_eventos_dislike}
+
+    # las movie_id ya recomendadas
+    rows = session.execute(
+        "SELECT movie_id FROM recommendations WHERE user_id = %s", (usuario,)
+    )
+    movie_ids_existentes = {row.movie_id for row in rows}
+
+    filtered_df = df_peliculas[df_peliculas["id"].isin(movie_ids_existentes)]
+    filtered_df = filtered_df.set_index("id").loc[list(movie_ids_existentes)]
+    embeddings_rec = np.stack(filtered_df["vector"].values)
+    ids_rec = list(
+        filtered_df.index
+    )  # Estos son los IDs reales de las películas filtradas
+
+    # Preparar sentencias de insertar y borrar
+    insert_stmt = session.prepare(
+        """
+        INSERT INTO recommendations (user_id, movie_id, score, titulo, sinopsis, img_path, seen)
+        VALUES (?, ?, ?, ?, ?, ?, false)
+        """
+    )
+    delete_stmt = session.prepare(
+        """
+        DELETE FROM recommendations WHERE user_id = ? AND movie_id = ?
+        """
+    )
+
+    # Procesar likes y añadir recomendaciones
+    for movie_id in peliculas_con_like:
+        desc_row = df_peliculas[df_peliculas["id"] == movie_id]
+        if desc_row.empty:
+            continue
+
+        descripcion = desc_row["overview"].values[0]
+        peliculas_similares = recommender.get_recommendations(
+            descripcion, tipo="descripcion"
+        )
+
+        for peli in peliculas_similares.values:
+            peli_id = peli[0]
+            if peli_id in movie_ids_existentes or peli_id == movie_id:
+                continue
+
+            info = df_peliculas[df_peliculas["id"] == peli_id]
+            if not info.empty:
+                row = info.iloc[0]
+                session.execute(
+                    insert_stmt,
+                    (
+                        usuario,
+                        peli_id,
+                        peli[3],  # score
+                        row["title"],
+                        row["overview"],
+                        row["poster_path"],
+                    ),
+                )
+
+    # Procesar dislikes y eliminar recomendaciones
+    for movie_id in peliculas_con_dislike:
+        desc_row = df_peliculas[df_peliculas["id"] == movie_id]
+        if desc_row.empty:
+            continue
+
+        descripcion = desc_row["overview"].values[0]
+        peliculas_similares = recommender.get_recommendations_dislike(
+            descripcion, peliculas=embeddings_rec, ids=ids_rec
+        )
+
+        for peli in peliculas_similares.values:
+            peli_id = peli[0]
+            if peli_id in movie_ids_existentes:
+                session.execute(delete_stmt, (usuario, peli_id))

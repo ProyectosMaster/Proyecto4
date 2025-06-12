@@ -42,6 +42,35 @@ class MovieRecommender:
 
         return recommendations
 
+    def get_recommendations_dislike(
+        self, new_overview, peliculas, ids, top_n=5, order_by_vote: bool = False
+    ):
+        """
+        Función que recibe como parámetros:
+        - new_overview: texto a pasar a embedding para luego comparar con los demás.
+        - Peliculas: embeddings de las peliculas dentro de recomendaciones para comparar con new_overview.
+        - ids: ids de las peliculas del parámetro Peliculas para que luego haga una busqueda de sus datos
+        Devuelve la información de las 5 películas más parecidas para eliminarlas de las recomendaciones
+        """
+        new_overview_emb = self.model.encode(new_overview)
+
+        similarities = calculate_similarity(peliculas, new_overview_emb)
+        top_indices = similarities.argsort()[-top_n:][::-1]
+
+        # ← Aquí devolvemos los ids que vinieron del dataframe filtrado
+        top_ids = [ids[i] for i in top_indices]
+
+        recommendations = self.database[self.database["id"].isin(top_ids)][
+            ["id", "title", "overview", "vote_average", "poster_path"]
+        ]
+
+        if order_by_vote:
+            recommendations = recommendations.sort_values(
+                by="vote_average", ascending=False
+            )
+
+        return recommendations
+
 
 def calculate_similarity(embeddings, target_embedding):
     """
